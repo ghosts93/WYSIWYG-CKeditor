@@ -2,6 +2,8 @@
 
 class CKeditorParser extends CKeditorParserWrapper {
 	public static $fck_mw_makeImage_options;
+	public $mInPre;
+    	public $mLastSection;
 	protected $fck_mw_strtr_span;
 	protected $fck_mw_strtr_span_counter = 1;
 	protected $fck_mw_taghook;
@@ -10,7 +12,7 @@ class CKeditorParser extends CKeditorParserWrapper {
     protected $fck_mw_propertyAtPage = array();
     protected $fck_mw_richmediaLinkAtPage = array();
     private $fck_allTagsCurrentTagReplaced = '';
-
+	
     // list here all standard wiki tags that are supported by Mediawiki
     private $FCKeditorWikiTags = array(
        "nowiki",
@@ -1802,5 +1804,104 @@ class CKeditorParser extends CKeditorParserWrapper {
         }
         return $this->fck_wikiTag($this->fck_allTagsCurrentTagReplaced, substr($matches[1], 1), $attr);
     }
+    public function closeParagraph() {
+		$result = '';
+		if ( $this->mLastSection !== '' ) {
+			$result = '</' . $this->mLastSection . ">\n";
+		}
+		$this->mInPre = false;
+		$this->mLastSection = '';
+		return $result;
+    }
+     /**
+	 * getCommon() returns the length of the longest common substring
+	 * of both arguments, starting at the beginning of both.
+	 *
+	 * @param string $st1
+	 * @param string $st2
+	 *
+	 * @return int
+	 */
+	private function getCommon( $st1, $st2 ) {
+		$shorter = min( strlen( $st1 ), strlen( $st2 ) );
 
+		for ( $i = 0; $i < $shorter; ++$i ) {
+			if ( $st1[$i] !== $st2[$i] ) {
+				break;
+			}
+		}
+		return $i;
+	}
+	/**
+	 * Open the list item element identified by the prefix character.
+	 *
+	 * @param string $char
+	 *
+	 * @return string
+	 */
+	private function openList( $char ) {
+		$result = $this->closeParagraph();
+
+		if ( '*' === $char ) {
+			$result .= "<ul><li>";
+		} elseif ( '#' === $char ) {
+			$result .= "<ol><li>";
+		} elseif ( ':' === $char ) {
+			$result .= "<dl><dd>";
+		} elseif ( ';' === $char ) {
+			$result .= "<dl><dt>";
+			$this->DTopen = true;
+		} else {
+			$result = '<!-- ERR 1 -->';
+		}
+
+		return $result;
+	}
+	/**
+	 * Close the current list item and open the next one.
+	 * @param string $char
+	 *
+	 * @return string
+	 */
+	private function nextItem( $char ) {
+		if ( '*' === $char || '#' === $char ) {
+			return "</li>\n<li>";
+		}elseif ( ':' === $char || ';' === $char ) {
+			$close = "</dd>\n";
+			if ( $this->DTopen ) {
+				$close = "</dt>\n";
+			}
+			if ( ';' === $char ) {
+				$this->DTopen = true;
+				return $close . '<dt>';
+			} else {
+				$this->DTopen = false;
+				return $close . '<dd>';
+			}
+		}
+		return '<!-- ERR 2 -->';
+	}
+	/**
+	 * Close the current list item identified by the prefix character.
+	 * @param string $char
+	 *
+	 * @return string
+	 */
+	private function closeList( $char ) {
+		if ( '*' === $char ) {
+			$text = "</li></ul>";
+		} elseif ( '#' === $char ) {
+			$text = "</li></ol>";
+		} elseif ( ':' === $char ) {
+			if ( $this->DTopen ) {
+				$this->DTopen = false;
+				$text = "</dt></dl>";
+			} else {
+				$text = "</dd></dl>";
+			}
+		} else {
+			return '<!-- ERR 3 -->';
+		}
+		return $text;
+	}
 }
